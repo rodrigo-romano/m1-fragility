@@ -253,11 +253,11 @@ clear Se1 Se2
 base_mech = 50;% Assumed long term mechanical stress (applied for 50 yr)
 base_thermal_annel = 200;   %psi
 sf_thermal_anneal = 1;
-sf_mechanical = 1:.2:5;
+sf_mechanical = 1:.25:5;
 % sf_mechanical = 3.5;%2; % * <---
 % weights = [7,3,2]/12; % used if ZA0,ZA30,ZA60
 
-Nsim = 5000; %1e5;%
+Nsim = 10000; %1e5;%
 % rp_bins = 1:.1:3.4;
 rp_bins = 1.7:.1:3.4; % start higher with no RLE % * <---
 
@@ -288,7 +288,8 @@ for k1 = 1:length(sf_thermal_anneal)
         
         S1 = stress_eq;
         for k3 =1:6
-            fprintf('Monte Carlo run of group %s\n',groupnames{k3});
+            % fprintf('Monte Carlo run of group %s\n',groupnames{k3});
+            
             % now build mean/sd for various rp
             % -- OLE ---
             sdratio = std(S1(16+(1:16),k3))/mean(S1((1:16)+16,k3));
@@ -301,20 +302,27 @@ for k1 = 1:length(sf_thermal_anneal)
             eq_stress_data.mean(5:9)=mean1;
             eq_stress_data.std(5:9) = sdratio*mean1;
             % MC
-            dataout = earthquake_MonteCarlo(eq_stress_data,rp_bins,Nsim,weibull,...
-                (sf_thermal_anneal(k1)*base_thermal_annel+sf_mechanical(k2)*base_mech));
+            rseed = 2;
+            b_stress = sf_thermal_anneal(k1)*base_thermal_annel+sf_mechanical(k2)*base_mech;
+            dataout = earthquake_MonteCarlo(eq_stress_data, rp_bins,...
+                Nsim, weibull, b_stress, rseed, 'auto');           
 %             pof1(k1,k2,k3)=dataout.pfT;
             Se1(k1,k2,k3) = dataout.Se1;
-%             total_sf1(k1,k2,k3) = (410)/dataout.Se1;  
+            % Stress interval (due to sampling noise)
+            Sfun = @(F,we) (((-log(1-F)).^(1/we.beta))/(we.K*tn)).^(1/we.n);
+            % If pfT - 2*pf_se goes negative, the interval is meaningless and Nsim is far too small
+            Se1_lo = Sfun(dataout.pfT - 2*dataout.pf_se, weibull);   % ~95% interval
+            Se1_hi = Sfun(dataout.pfT + 2*dataout.pf_se, weibull);
             
             % -- Fractile --
             eq_stress_data_fractile.mean = eq_stress_data.mean;
             eq_stress_data_fractile.std = eq_stress_data.std;
-            dataout = earthquake_MonteCarlo(eq_stress_data_fractile,rp_bins,Nsim,weibull,...
-                (sf_thermal_anneal(k1)*base_thermal_annel+sf_mechanical(k2)*base_mech));
+            rseed = 2;
+            b_stress = sf_thermal_anneal(k1)*base_thermal_annel+sf_mechanical(k2)*base_mech;
+            dataout = earthquake_MonteCarlo(eq_stress_data_fractile, rp_bins,...
+                Nsim, weibull, b_stress, rseed, "auto");
 %             pof1(k1,k2,k3)=dataout.pfT;
             Se1_fract(k1,k2,k3) = dataout.Se1; % fractile result
-%             total_sf1(k1,k2,k3) = (410)/dataout.Se1;  
 
             if(abs(sf_mechanical(k2)-3.5)<.1 && k3 == 3)
                figure(108);
@@ -337,7 +345,9 @@ temp2(:,:)=Se1_fract(1,:,:);
 figure(1002); set(gcf,'Units','pixels','Position',[448,259,809,420])
 for k = 1:6
     subplot(2,3,k)
-    plot(sf_mechanical,temp(:,k),sf_mechanical,temp2(:,k),[min(sf_mechanical),max(sf_mechanical)],ones(1,2)*grouplimits(k));%,sf_mechanical,Se2);
+    plot(sf_mechanical,temp(:,k),'.-',...
+        sf_mechanical,temp2(:,k),'x--',...
+        [min(sf_mechanical),max(sf_mechanical)],ones(1,2)*grouplimits(k));%,sf_mechanical,Se2);
     legend('mean hazard','95% fractile hazard',sprintf('limit:%s',groupSF{k}));
     grid on;
     % legend('with actuators','without actuators')

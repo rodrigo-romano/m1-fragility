@@ -24,39 +24,39 @@ function dataout = earthquake_MonteCarlo(eq_stress_data,rp_bins,Nsim,weibull,bas
     
     K = weibull.K;
     beta = weibull.beta;
-    n =weibull.n;
+    n = weibull.n;
     
     nYT = 50*Nsim; %total number of years.
-
-    % log of return period at center of each bin
-    for k = 1:length(rp_bins)-1
+    logrp = zeros(length(rp_bins)-1,1);
+    % Log of return period at center of each bin
+    for k = 1:length(logrp)
         logrp(k) = (mean(rp_bins(k:(k+1))));
     end
     rp = 10.^(logrp);
     nY = diff(10.^rp_bins);  %number of years between eq on average;
-%     numE = round(nYT./nY);  % HOW many of THIS earthquake in the total period
     numE = round(nYT./rp);  % how MANY of THIS earthquake in the total period
-
-    stress_mean = interp1(eq_stress_data.logrp,eq_stress_data.mean,logrp);
-    stress_std = interp1(eq_stress_data.logrp,eq_stress_data.std,logrp);
     
     %% Setup random earthquake levels and times
     earthquake_time = zeros(sum(numE),1);
-    eqrp = zeros(sum(numE),1);
+    eqrp = zeros(size(earthquake_time));
 
     is = 1;
     for k = 1:length(nY)
         nE = numE(k); %number of EQ in total
-        earthquake_time(is:(is+nE-1)) = rand(nE,1)*nYT; %WHEN it occured 
+        earthquake_time(is:(is+nE-1)) = rand(nE,1)*nYT; %WHEN it occured
         eqrp(is:(is+nE-1)) = rp(k)*ones(nE,1); % Return period
-         eqid(is:(is+nE-1)) =k;
+        eqid(is:(is+nE-1)) = k;
         is = is+nE;
     end
     
     % sort by the time they occur!
     [earthquake_time, ids] = sort(earthquake_time); 
-    eqrp = eqrp(ids);
     eqid = eqid(ids);
+    
+    %% Mean and std interpolation for selected RP
+    stress_mean = interp1(eq_stress_data.logrp,eq_stress_data.mean,logrp);
+    stress_std = interp1(eq_stress_data.logrp,eq_stress_data.std,logrp);
+    
     %% Sum up equivalent time in each period!
     Ft = zeros(Nsim,1); % failure for each year?
     kk = 1;
@@ -69,36 +69,38 @@ function dataout = earthquake_MonteCarlo(eq_stress_data,rp_bins,Nsim,weibull,bas
    % APPROXIMATELY 4000 PSI>.. ok..
    %not 700?
     % check calculation
-    if(0)
-        
-        F_check = 1-exp(-(K*sigmaC.^n.*teT_baseline).^beta)
-    
+    if(false)
+        F_check = 1-exp(-(K*sigmaC.^n.*teT_baseline).^beta)  %#ok<UNRCH>
     end
     
-    teT = teT_baseline; % SHOULD START WITH 50 years at 250 psi...
+    teT = teT_baseline; % SHOULD START WITH 50 years base_stress!
     Nyears = 50;
     Te = zeros(1,Nsim);
+    cumk_per50y = zeros(size(Ft));
+    
     for k =1:length(earthquake_time)
-        if(earthquake_time(k)<(kk*Nyears))
-            stress_eq = (stress_mean(eqid(k))+randn(1)*stress_std(eqid(k)));
-            teT =teT+ (stress_eq/sigmaC).^n.*t1_50year;  %TT/(stC)^n SUM ((st)^n)
-        else
-    %         Ft(kk) = 1-exp(-(K*sigmaC.^n.*teT).^beta);
+        stress_eq = (stress_mean(eqid(k))+ randn(1)*stress_std(eqid(k)));
+        if(earthquake_time(k) > (kk*Nyears))
             Ft(kk) = 1-exp(-(K*sigmaC.^n.*teT).^beta);
             Te(kk) = teT;
-            kk =kk+1;
-            teT=teT_baseline;
+            kk = kk+1;
+            
+            teT = teT_baseline;
+            cumk_per50y(kk-1) = k;
         end
+        teT = teT+ (stress_eq/sigmaC).^n.*t1_50year;
     end
+
     Ft(kk) = 1-exp(-(K*sigmaC.^n.*teT).^beta);
     Te(kk) = teT;
-    
+    cumk_per50y(kk) = k;
 
     
     dataout.Te = Te;
     dataout.pf = Ft;
     dataout.pfT = mean(Ft);
-    Se1 =(((-log(1-mean(Ft))).^(1/beta))/(K*50*365*24*3600)).^(1/n);
+    dataout.k_per50y = diff([0;cumk_per50y]);
+    Se1 =(((-log(1-mean(Ft))).^(1/beta))/(K*t1_50year)).^(1/n);
     
     dataout.Se1 = Se1; % equivalent 50 year stress from mean Ft
 end

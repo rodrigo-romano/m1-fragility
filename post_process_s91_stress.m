@@ -34,9 +34,10 @@ groupSF = {'Fibrefrax','Fibrefrax','Fibrefrax','QF-150','Fibrefrax','Polished, c
 % S91 runs for reference
 % 1-16 SLE
 % 17 -32 OLE
-% 33-37 OLE CMS (35=1) Scale = (.54,.735,1,1.36,1.85)
+% 33-37 SLE CMS (35=1) Scale = (.54,.735,1,1.36,1.85)
 % 38 -42 OLE CMS (40=1)Scale = (.54,.735,1,1.36,1.85)
 
+% close all;
 
 %% PART 1
 % 1. Loads all 42 stress cases into "stressdata" for later use
@@ -46,100 +47,114 @@ groupSF = {'Fibrefrax','Fibrefrax','Fibrefrax','QF-150','Fibrefrax','Polished, c
 Nseg =  7;
 Se = 300; %normalizing stress psi for equivlanet time (ends up not having any effect)
 tn = 60*60*24*365*50; % normalizing time in seconds (50 years)
-S_annealing =100; %annealing stress
+S_annealing = 100; %annealing stress
 S_thermal = 100; %thermal stress
 n = 30.5*ones(1,Nseg);
 dt = .01;
 SFM = 1;
 SFTA = 1;
 
-for k = 1:42 % ALL
-    % 1 Import stress data
-    %fldr = 'C:\Users\dschwartz\Desktop\BACKUP_MBP_3-8-2021\GIT\general_IM_tools\Data\S91\stress';
-    fldr = 'T:\SeismicResults\S91\dschwartz\stress';
-    stdy = 'S91';
+stressdata = cell(42,1);
+tet = zeros(numel(stressdata),Nseg,6);
+eqs = zeros(size(tet));
 
+for k = 1:numel(stressdata) % ALL
+    % 1 Import stress data    
+    % fldr = 'T:\SeismicResults\S91\dschwartz\stress';
+    % fldr = '/Users/rromano/Workspace/fromDaveS/SeismicResults/S91/dschwartz/stress';
+    fldr = '/home/rromano/Workspace/seismic-tool/Results/S91/stress';
+    stdy = 'S91';
+    
     if k<10
         strid = sprintf('00%d',k);
     else
         strid = sprintf('0%d',k);
     end
-    fn =sprintf('%s\\GMT_Earthquakes_%s_%s.mat',fldr,stdy,strid);
+    fn = fullfile(fldr, sprintf('GMT_Earthquakes_%s_%s.mat',stdy,strid));
     load(fn);
     % Stress1 (1x6) cellarray of stress matrices. Each matrix Nx7 (index x
     % segment)
     % params_all parameters of run (not used here)
     % ids (1x7) of time ids (not used here)
 
-    stressdata{k}=Stress1;% store each run for later!
+    stressdata{k} = Stress1;% store each run for later!
     psi2Nm2 = 6894.744825; % not used
     
-    % calculate equivalent time and stress for each run, for given safety factors and Thermal/annealing assumption 
+    % Calculate equivalent time and stress for each run, for given safety
+    % factors and Thermal/annealing assumption
     for k2 = 1:Nseg
         for k3 =1:6 % stress groups!
             %tet = total equivalent time for a given earthquake
             %eqs = equivalent stress for that earthquake (50 yr)
            tet(k,k2,k3) = eqtime(Stress1{k3}(:,k2)*SFM+(S_annealing+S_thermal)*SFTA,n(k2),Se,dt); 
-           eqs(k,k2,k3)= eqstress(tet(k,k2,k3),Se,n(k2),tn);
+           eqs(k,k2,k3) = eqstress(tet(k,k2,k3),Se,n(k2),tn);
         end
     end
     
 end
+%% PLOT histograms of equivalent stress (S1)
 %%
-% PLOT histograms of equivalent stress (S1)
-% combine ALL segments
-sids = 1; % only do 1 segment
-sids = 1:7; % all 7 segments
-for k3 = 1:6
-    figure(101)
-    subplot(2,3,k3);
-    histogram((eqs(1:16,sids,k3)),10); hold on;
-    plot(eqs(35,sids,k3),zeros(length(sids),1),'r*')
-    title(sprintf('Stress Group %d',k3));
-    xlabel('50 yr equivalent stress (psi)')
-    legend('Conditional Spectra','Mean Spectra')
-    
-    figure(102)
-    subplot(2,3,k3);
-    histogram((eqs(17:32,sids,k3)),10); hold on;
-    plot(eqs(40,sids,k3),zeros(length(sids),1),'r*')        
-    title(sprintf('Stress Group %d',k3));
-    xlabel('50 yr equivalent stress (psi)')
-    legend('Conditional Spectra','Mean Spectra')
-
-    
+if(1 == 0) 
+    % combine ALL segments
+    % sids = 1; % only do 1 segment
+    sids = 1:7; % all 7 segments
+    for k3 = 1:6
+        figure(101)
+        subplot(2,3,k3);
+        histogram((eqs(1:16,sids,k3)),10); hold on;
+        plot(eqs(35,sids,k3),zeros(length(sids),1),'*')
+        title(sprintf('Stress Group %d',k3));
+        xlabel('50 yr equivalent stress (psi)')
+        legend('Conditional Spectra','Mean Spectra')
+        hold off;
+        
+        figure(102)
+        subplot(2,3,k3);
+        histogram((eqs(17:32,sids,k3)),10); hold on;
+        plot(eqs(40,sids,k3),zeros(length(sids),1),'*')
+        title(sprintf('Stress Group %d',k3));
+        xlabel('50 yr equivalent stress (psi)')
+        legend('Conditional Spectra','Mean Spectra')
+        hold off;
+    end
+    figure(101);
+    sgtitle('SLE runs');
+    figure(102);
+    sgtitle('OLE runs');
 end
-figure(101);
-sgtitle('SLE runs')
-figure(102);
-sgtitle('OLE runs')
+%% PLOT histograms of equivalent stress (S1) - max stress across segments
 %%
-% PLOT histograms of equivalent stress (S1) - max stress agross segments
-sids = 1; % only do 1 segment
-sids = 1:7; % all 7 segments
-for k3 = 1:6
-    figure(201)
-    subplot(2,3,k3);
-    histogram(max(eqs(1:16,sids,k3),[],2),10); hold on;
-    plot(max(eqs(35,sids,k3),[],2),zeros(length(sids),1),'r*')
-    title(sprintf('Stress Group %d',k3));
-    xlabel('50 yr equivalent stress (psi)')
-    legend('Conditional Spectra','Mean Spectra')
+if(1 == 0)
+    % sids = 1; % only do 1 segment
+    sids = 1:7; % all 7 segments
+    for k3 = 1:6
+        figure(201)
+        set(gcf,'Units','pixels','Position',[448,259,809,420])
+        subplot(2,3,k3);
+        histogram(max(eqs(1:16,sids,k3),[],2),10); hold on;
+        plot(max(eqs(35,sids,k3),[],2),zeros(length(sids),1),'r*')
+        title(sprintf('Stress Group %d',k3));
+        xlabel('50 yr equivalent stress (psi)')
+        if(k3==1), legend('Conditional Spectra','Mean Spectra'); end
+        hold off;
+        
+        figure(202)        
+        subplot(2,3,k3);
+        histogram(max(eqs(17:32,sids,k3),[],2),10); hold on;
+        plot(max(eqs(40,sids,k3),[],2),zeros(length(sids),1),'r*')
+        title(sprintf('Stress Group %d',k3));
+        xlabel('50 yr equivalent stress (psi)')
+        if(k3==1), legend('Conditional Spectra','Mean Spectra'); end
+        hold off;
+    end
     
-    figure(202)
-    subplot(2,3,k3);
-    histogram(max(eqs(17:32,sids,k3),[],2),10); hold on;
-    plot(max(eqs(40,sids,k3),[],2),zeros(length(sids),1),'r*')        
-    title(sprintf('Stress Group %d',k3));
-    xlabel('50 yr equivalent stress (psi)')
-    legend('Conditional Spectra','Mean Spectra')
-
-    
+    figure(201);
+    sgtitle('SLE runs')
+    set(gcf,'Units','pixels','Position',[448,259,809,420])
+    figure(202);
+    set(gcf,'Units','pixels','Position',[224,125,809,420])
+    sgtitle('OLE runs')
 end
-figure(201);
-sgtitle('SLE runs')
-figure(202);
-sgtitle('OLE runs')
 %%
 % PART II
 % condition hazard data to prepare for fragilty studies
@@ -198,52 +213,60 @@ eq_stress_data.logrp = log10(rp_study);
 % calculate return periods. Worst case fractile ~ 30% higher than mean.
 % 
 eq_stress_data_fractile = eq_stress_data;
-oleSa = oleSa/1.3;
-sleSa = sleSa/1.3;% look on hazard curve for return period associatd with 30% lower magnitude earthquake.
+oleSa_ = oleSa/1.3;
+sleSa_ = sleSa/1.3;% look on hazard curve for return period associated with 30% lower magnitude earthquake.
 % use OLE for first 4 return periods
-rp_study(1:4) = 1./(10.^interp1(log10(hzd(:,1)),log10(hzd(:,3)),log10(oleSa*[.54,.735,1,1.36])));
+rp_study(1:4) = 1./(10.^interp1(log10(hzd(:,1)),log10(hzd(:,3)),log10(oleSa_*[.54,.735,1,1.36])));
 % Use SLE for last 5
-rp_study(5:9) = 1./(10.^interp1(log10(hzd(:,1)),log10(hzd(:,3)),log10(sleSa*[.54,.735,1,1.36,1.85]),'linear','extrap'));
+rp_study(5:9) = 1./(10.^interp1(log10(hzd(:,1)),log10(hzd(:,3)),log10(sleSa_*[.54,.735,1,1.36,1.85]),'linear','extrap'));
 eq_stress_data_fractile.logrp = log10(rp_study);
+
 %%
 % check max over 7 mirrors vs. size of eq
 figure(301);
-loglog([.54,.735,1,1.36,1.85]*sleSa, (max(eqs(33:37,sids,k3),[],2)),'.-',...
-    [.54,.735,1,1.36,1.85]*oleSa, (max(eqs(38:42,sids,k3),[],2)),'.-')
-xlabel('Ground SA(0.1s) (g)')
+if(~exist('sids','var')), sids = 1:7; end
+loglog([.54,.735,1,1.36,1.85]*sleSa, (max(eqs(33:37,sids,k3),[],2)),'^--',...
+    [.54,.735,1,1.36,1.85]*oleSa, (max(eqs(38:42,sids,k3),[],2)),'v--')
+xlabel('T=0.1s Ground SA (g)')
 ylabel('Max 50 yr eq. stress over 7 segments (psi)')
-legend('scaled OLE mean spectra runs','scaled SLE mean spectra runs')
+legend('Scaled SLE mean spectra runs','Scaled OLE mean spectra runs')
 grid on;
+
 %% plot some hazard stuff
-figure(103);
-N1 = size(hzd,1);
-loglog(hzd(:,1),hzd(:,[3]),'k',...
-    hzd(:,1)*1.3,hzd(:,[3]),'r'...
-    ,hzd(:,1),ones(N1,1)*1/100,'k:',hzd(:,1),ones(N1,1)*1/2475,'k:','LineWidth',2);
-grid on;
-xlabel('Spectral Accel (g) T = 0.1s');
-ylabel('Frequency of Exceedance (times/year)')
-legend('mean hazard','95 percentile hazard','OLE/SLE frequencies')
+if(0)
+    figure(103); %#ok<UNRCH>
+    N1 = size(hzd,1);
+    loglog(hzd(:,1),hzd(:,3),'k',...
+        hzd(:,1)*1.3,hzd(:,3),'r'...
+        ,hzd(:,1),ones(N1,1)*1/100,'k:',hzd(:,1),ones(N1,1)*1/2475,'k:','LineWidth',2);
+    grid on;
+    xlabel('Spectral Accel (g) T = 0.1s');
+    ylabel('Frequency of Exceedance (times/year)')
+    legend('mean hazard','95 percentile hazard','OLE/SLE frequencies')
+end
+
 %% PART III
 % 
 % now take Stressdata{} and convert to eq time for given set of safety
 % factors
 clear Se1 Se2
 base_mech = 50;% Assumed long term mechanical stress (applied for 50 yr)
-base_thermal_annel=200;%psi
+base_thermal_annel = 200;   %psi
 sf_thermal_anneal = 1;
 sf_mechanical = 1:.2:5;
-sf_mechanical = 2;
+% sf_mechanical = 3.5;%2; % * <---
 % weights = [7,3,2]/12; % used if ZA0,ZA30,ZA60
 
-Nsim =5000;
+Nsim = 5000; %1e5;%
 % rp_bins = 1:.1:3.4;
-rp_bins = 1.7:.1:3.4; % start higher with no RLE
+rp_bins = 1.7:.1:3.4; % start higher with no RLE % * <---
 
 weibull.n = 30.5;
 weibull.beta = .4522;
 weibull.K = 3e-101;
 clear pof1 pof2 req_lim1 req_lim2
+Se1 = zeros(length(sf_thermal_anneal), length(sf_mechanical), 6);
+Se1_fract = zeros(size(Se1));
 for k1 = 1:length(sf_thermal_anneal)
     for k2=1:length(sf_mechanical)
         clear tet
@@ -251,71 +274,79 @@ for k1 = 1:length(sf_thermal_anneal)
         for j = 1:42
             for k = 1:Nseg
                 for k3=1:6
-                 tet(j,k3,k) = eqtime(stressdata{j}{k3}(:,k)*sf_mechanical(k2)+sf_thermal_anneal(k1)*base_thermal_annel,n(k),Se,dt); 
+                    s = stressdata{j}{k3}(:,k)*sf_mechanical(k2)+...
+                        sf_thermal_anneal(k1)*base_thermal_annel;
+                    tet(j,k3,k) = eqtime(s,n(k),Se,dt);
                 end
             end
         end
         
-        % convert to eq stress
-        stress_eq = (tet/(3600*24*365*50)).^(1/n(1))*Se; % use 50 year stress!
-        stress_eq=max(stress_eq,[],3); % max across segments
+        % Convert to eq stress
+        stress_eq = eqstress(tet,Se,weibull.n,tn);
+        % (tet/(3600*24*365*50)).^(1/n(1))*Se; % use 50 year stress!        
+        stress_eq = max(stress_eq,[],3); % max across segments
+        
         S1 = stress_eq;
         for k3 =1:6
+            fprintf('Monte Carlo run of group %s\n',groupnames{k3});
             % now build mean/sd for various rp
             % -- OLE ---
-            sdratio = std(S1(16+[1:16],k3))/mean(S1([1:16]+16,k3));
-            mean1 = S1(32+5+[1:4],k3);
+            sdratio = std(S1(16+(1:16),k3))/mean(S1((1:16)+16,k3));
+            mean1 = S1(32+5+(1:4),k3);
             eq_stress_data.mean(1:4)=mean1;
             eq_stress_data.std(1:4) = sdratio*mean1;
             % -- SLE --- 
             sdratio = std(S1(1:16,k3))/mean(S1(1:16,k3));
-            mean1 = S1(32+[1:5],k3);
+            mean1 = S1(32+(1:5),k3);
             eq_stress_data.mean(5:9)=mean1;
             eq_stress_data.std(5:9) = sdratio*mean1;
-
-            dataout = earthquake_MonteCarlo(eq_stress_data,rp_bins,Nsim,weibull,(sf_thermal_anneal(k1)*base_thermal_annel+sf_mechanical(k2)*base_mech));
+            % MC
+            dataout = earthquake_MonteCarlo(eq_stress_data,rp_bins,Nsim,weibull,...
+                (sf_thermal_anneal(k1)*base_thermal_annel+sf_mechanical(k2)*base_mech));
 %             pof1(k1,k2,k3)=dataout.pfT;
             Se1(k1,k2,k3) = dataout.Se1;
 %             total_sf1(k1,k2,k3) = (410)/dataout.Se1;  
             
-            
+            % -- Fractile --
             eq_stress_data_fractile.mean = eq_stress_data.mean;
             eq_stress_data_fractile.std = eq_stress_data.std;
-            dataout = earthquake_MonteCarlo(eq_stress_data_fractile,rp_bins,Nsim,weibull,(sf_thermal_anneal(k1)*base_thermal_annel+sf_mechanical(k2)*base_mech));
+            dataout = earthquake_MonteCarlo(eq_stress_data_fractile,rp_bins,Nsim,weibull,...
+                (sf_thermal_anneal(k1)*base_thermal_annel+sf_mechanical(k2)*base_mech));
 %             pof1(k1,k2,k3)=dataout.pfT;
             Se1_fract(k1,k2,k3) = dataout.Se1; % fractile result
 %             total_sf1(k1,k2,k3) = (410)/dataout.Se1;  
 
             if(abs(sf_mechanical(k2)-3.5)<.1 && k3 == 3)
-               figure(104);
+               figure(108);
+               set(gcf,'Units','pixels','Position',[224,125,809,360])
                subplot(121);
                histogram(log10(dataout.Te/3600/24/365))
-               xlabel('log_{10} of equivelant time (years)')
+               xlabel('Log_{10} of equivelant time (years)')
                subplot(122);
                histogram(log10(dataout.pf))
-               xlabel('log_{10} of probability of failure')
-               
-               disp('done')
+               xlabel('Log_{10} of probability of failure')               
+               fprintf('Done!\n');
             end
         end
     end
 end
 
 %%
-temp(:,:)=Se1(1,:,:); 
-temp2(:,:)=Se1_fract(1,:,:); 
-figure(1002);
+temp(:,:)=Se1(1,:,:);
+temp2(:,:)=Se1_fract(1,:,:);
+figure(1002); set(gcf,'Units','pixels','Position',[448,259,809,420])
 for k = 1:6
     subplot(2,3,k)
-plot(sf_mechanical,temp(:,k),sf_mechanical,temp2(:,k),[min(sf_mechanical),max(sf_mechanical)],ones(1,2)*grouplimits(k));%,sf_mechanical,Se2);
-legend('mean hazard','95% fractile hazard',sprintf('limit:%s',groupSF{k}));
-grid on; 
-% legend('with actuators','without actuators')
-ylabel('equivalent 50 year stress (all stress) psi')
-xlabel('mechanical safety factor')
-% title('Total 50 year equivalent stress (200psi+mech sf* (gravity+seismic))')
-title(groupnames{k});
-% ylim([200 800]);
+    plot(sf_mechanical,temp(:,k),sf_mechanical,temp2(:,k),[min(sf_mechanical),max(sf_mechanical)],ones(1,2)*grouplimits(k));%,sf_mechanical,Se2);
+    legend('mean hazard','95% fractile hazard',sprintf('limit:%s',groupSF{k}));
+    grid on;
+    % legend('with actuators','without actuators')
+    ylabel('equivalent 50 year stress (all stress) psi')
+    xlabel('mechanical safety factor')
+    % title('Total 50 year equivalent stress (200psi+mech sf* (gravity+seismic))')
+    title(groupnames{k});
+    % ylim([200 800]);
+    axis tight
 end
 
 
